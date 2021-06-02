@@ -8,7 +8,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 NC='\033[0m'
 
-if [[ ! $COMMAND_NAME ]] || [[ $COMMAND_NAME = "help" ]] || [[ $COMMAND_NAME = "-h" ]] || [[ $COMMAND_NAME = "--help" ]]; then
+function help() {
 	echo -e "$ARROW Usage: ${YELLOW}$BIN_NAME <command>${NC}"
     echo
     echo "Commands:"
@@ -17,32 +17,33 @@ if [[ ! $COMMAND_NAME ]] || [[ $COMMAND_NAME = "help" ]] || [[ $COMMAND_NAME = "
     echo "   list-keys        List of all SSH keys"
     echo "   copy             Copy public SSH key"
     echo "   new              Generate new SSH key"
-    echo "   host             Add host to SSH config, use --key to generate new key"
+    echo "   host             Add host to SSH config"
     echo "   remove           Remove host from SSH config"
     echo "   list-host        List of all hosts in SSH config"
-fi
+}
 
-if [[ "$COMMAND_NAME" = "list" ]]; then
-	$BIN_NAME list-keys
-	$BIN_NAME list-host
-fi
+function list() {
+	list-keys
+	list-host
+}
 
-if [[ $COMMAND_NAME = "list-keys" ]]; then
+
+function list-keys() {
 	echo -e "${YELLOW}$ARROW List of available keys:${NC}"
 
 	for file in ~/.ssh/*.pub
 	do
 	    echo "- "${file##*/}
 	done
-fi
+}
 
-if [[ $COMMAND_NAME = "list-host" ]]; then
+function list-host() {
 	echo -e "${YELLOW}$ARROW List of available hosts in SSH config:${NC}"
 
 	awk '/host (.*)/ { print "- "$2 }' ~/.ssh/config
-fi
+}
 
-if [[ $COMMAND_NAME = "copy" ]]; then
+function copy() {
 	folder=$HOME"/.ssh/"
 	key=$2
 
@@ -57,11 +58,14 @@ if [[ $COMMAND_NAME = "copy" ]]; then
 			cat $folder$key | pbcopy && echo -e "${GREEN}$ARROW Success: Your public SSH key $key was successfully copied to the clipboard.${NC}"
 	    fi
 	fi
-fi
+}
 
-if [[ $COMMAND_NAME = "new" ]]; then
+function new() {
 	while true; do
-		read -p "$(echo -e "${YELLOW}$ARROW Enter key file name:${NC} ")" key
+		key=$2
+		if [[ ! -n $key ]]; then
+			read -p "$(echo -e "${YELLOW}$ARROW Enter key file name:${NC} ")" key
+		fi
 
 		if [[ -f $HOME"/.ssh/id_ed25519_"$key ]]; then
 			echo -e "${RED}$ARROW Error: Key with this file name already exists.${NC}"
@@ -74,14 +78,10 @@ if [[ $COMMAND_NAME = "new" ]]; then
 
 	ssh-keygen -o -a 100 -t ed25519 -f ~/.ssh/id_ed25519_$key -C "$comment"
 
-	if [[ $2 ]] && [[ $2 = "--save" ]]; then
-		echo $key > ~/.ssh/key_name.tmp
-	fi
-
 	echo -e "${GREEN}$ARROW Success: SSH key '$key' was successfully created with comment '$comment'.${NC}"
-fi
+}
 
-if [[ $COMMAND_NAME = "host" ]]; then
+function host() {
 	config="$(cat ~/.ssh/config)"
 
 	while true; do
@@ -110,21 +110,19 @@ if [[ $COMMAND_NAME = "host" ]]; then
 	read -p "$(echo -e "${YELLOW}$ARROW Enter host user (default root):${NC} ")" user
 	user=${user:-"root"}
 
-	if [[ $2 ]] && [[ $2 = "--key" ]]; then
-		$BIN_NAME new --save
-		key="$(cat ~/.ssh/key_name.tmp)"
-		rm ~/.ssh/key_name.tmp
-	else
-		read -p "$(echo -e "${YELLOW}$ARROW Enter SSH key name (default none):${NC} ")" key
-		key=${key:-"none"}
-	fi
-
 	echo "host $shortname" >> ~/.ssh/config
 	echo " hostname $host" >> ~/.ssh/config
 	echo " port $port" >> ~/.ssh/config
 	echo " user $user" >> ~/.ssh/config
 
+	read -p "$(echo -e "${YELLOW}$ARROW Enter SSH key name (default none):${NC} ")" key
+	key=${key:-"none"}
+
 	if [[ ! $key = "none" ]]; then
+		if [[ ! -f $HOME"/.ssh/id_ed25519_"$key ]]; then
+			echo -e "${YELLOW}$ARROW ~/.ssh/id_ed25519_$key is not exists, so create it:${NC}"
+			new 0 $key
+		fi
 		echo " IdentityFile ~/.ssh/id_ed25519_$key" >> ~/.ssh/config
 	fi
 
@@ -140,9 +138,9 @@ if [[ $COMMAND_NAME = "host" ]]; then
 
 	echo -e "${GREEN}$ARROW Success: SSH host '$shortname' was successfully added to SSH config.${NC}"
 	echo -e "${GREEN}$ARROW          You can now use 'ssh $shortname' to go to SSH.${NC}"
-fi
+}
 
-if [[ $COMMAND_NAME = "remove" ]]; then
+function remove() {
 	config="$(cat ~/.ssh/config)"
 	shortname=$2
 
@@ -159,4 +157,27 @@ if [[ $COMMAND_NAME = "remove" ]]; then
 	sed -ie "/^host $shortname$/,/^$/d" ~/.ssh/config
 
 	echo -e "${GREEN}$ARROW Success: SSH host '$shortname' was successfully remove from SSH config.${NC}"
+}
+
+if [ $# -eq 0 ]; then
+	help
 fi
+
+case $COMMAND_NAME in
+	help)
+		help;;
+	list)
+		list;;
+	list-keys)
+		list-keys;;
+	list-host)
+		list-host;;
+	copy)
+		copy;;
+	new)
+		new;;
+	host)
+		host;;
+	remove)
+		remove;;
+esac
